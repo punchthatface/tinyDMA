@@ -203,6 +203,7 @@ module tb_spi_psram_ctrl;
       @(posedge clk);
       req_valid <= 1'b0;
 
+      wait (busy == 1'b1);
       wait (busy == 1'b0);
     end
   endtask
@@ -222,6 +223,7 @@ module tb_spi_psram_ctrl;
       @(posedge clk);
       req_valid <= 1'b0;
 
+      wait (busy == 1'b1);
       wait (rsp_valid == 1'b1);
       data = rsp_rdata;
 
