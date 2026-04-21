@@ -12,7 +12,8 @@ module psram_model (
     PM_CMD,
     PM_ADDR,
     PM_WRITE_DATA,
-    PM_READ_DATA
+    PM_READ_DATA,
+    PM_READ_ID
   } pm_state_t;
 
   pm_state_t state;
@@ -25,6 +26,7 @@ module psram_model (
   logic [5:0]  bit_count;
 
   logic reset_enable_seen;
+  localparam logic [7:0] READ_ID_VALUE = 8'h0D;
 
   logic [7:0] last_cmd;
   logic [7:0] prev_cmd;
@@ -107,6 +109,13 @@ module psram_model (
                 state <= PM_ADDR;
               end
 
+              8'h9F: begin
+                prev_cmd       <= last_cmd;
+                last_cmd       <= 8'h9F;
+                data_shift_reg <= READ_ID_VALUE;
+                state          <= PM_READ_ID;
+              end
+
               default: begin
                 reset_enable_seen <= 1'b0;
                 state             <= PM_IDLE;
@@ -150,7 +159,7 @@ module psram_model (
       endcase
     end else begin
       // Output timing on falling edge: data becomes available after the falling edge.
-      if (state == PM_READ_DATA) begin
+      if (state == PM_READ_DATA || state == PM_READ_ID) begin
         miso           <= data_shift_reg[7];
         data_shift_reg <= {data_shift_reg[6:0], 1'b0};
         bit_count      <= bit_count + 1'b1;

@@ -116,11 +116,9 @@ module spi_master #(
 
       ST_BIT_HIGH: begin
         spi_sck_reg_next = 1'b1;
-
         if (rx_en_reg) begin
           rx_shift_reg_next = {rx_shift_reg[MAX_BITS-2:0], spi_miso};
         end
-
         state_next = ST_BIT_LOW;
       end
 
