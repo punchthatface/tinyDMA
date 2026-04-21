@@ -47,16 +47,19 @@ module spi_psram_ctrl #(
   // Wait counter used during initial power-up delay
   logic [15:0] reset_wait_count, reset_wait_count_next;
 
-  // Bit counter for current SPI phase (8 for command/data, 24 for address)
+  // Bit counter for current SPI phase
   logic [5:0] bit_count, bit_count_next;
 
-  // Shift register for outgoing serialized data on MOSI
-  logic [ADDR_W-1:0] tx_shift_reg, tx_shift_reg_next;
+  // Shift register for command / reset / write-data bytes
+  logic [7:0] byte_shift_reg, byte_shift_reg_next;
 
-  // Shift register for incoming serialized read data from MISO
+  // Shift register for outgoing address bits
+  logic [ADDR_W-1:0] addr_shift_reg, addr_shift_reg_next;
+
+  // Shift register for incoming read data from MISO
   logic [DATA_W-1:0] rx_shift_reg, rx_shift_reg_next;
 
-  // Latched request fields for the current transaction
+  // Latched request fields for current transaction
   logic [ADDR_W-1:0] request_addr_reg, request_addr_reg_next;
   logic [DATA_W-1:0] request_wdata_reg, request_wdata_reg_next;
   logic              request_rw_reg, request_rw_reg_next;
@@ -67,10 +70,10 @@ module spi_psram_ctrl #(
   logic spi_mosi_reg, spi_mosi_reg_next;
 
   // Registered status / handshake outputs
-  logic             req_ready_next;
-  logic             rsp_valid_next;
+  logic              req_ready_next;
+  logic              rsp_valid_next;
   logic [DATA_W-1:0] rsp_rdata_next;
-  logic             busy_next;
+  logic              busy_next;
 
   assign spi_clk  = spi_clk_reg;
   assign spi_cs_n = spi_cs_n_reg;
@@ -82,7 +85,8 @@ module spi_psram_ctrl #(
 
       reset_wait_count <= '0;
       bit_count <= '0;
-      tx_shift_reg <= '0;
+      byte_shift_reg <= '0;
+      addr_shift_reg <= '0;
       rx_shift_reg <= '0;
 
       request_addr_reg <= '0;
@@ -102,7 +106,8 @@ module spi_psram_ctrl #(
 
       reset_wait_count <= reset_wait_count_next;
       bit_count <= bit_count_next;
-      tx_shift_reg <= tx_shift_reg_next;
+      byte_shift_reg <= byte_shift_reg_next;
+      addr_shift_reg <= addr_shift_reg_next;
       rx_shift_reg <= rx_shift_reg_next;
 
       request_addr_reg <= request_addr_reg_next;
@@ -125,7 +130,8 @@ module spi_psram_ctrl #(
 
     reset_wait_count_next = reset_wait_count;
     bit_count_next = bit_count;
-    tx_shift_reg_next = tx_shift_reg;
+    byte_shift_reg_next = byte_shift_reg;
+    addr_shift_reg_next = addr_shift_reg;
     rx_shift_reg_next = rx_shift_reg;
 
     request_addr_reg_next = request_addr_reg;
@@ -158,20 +164,18 @@ module spi_psram_ctrl #(
       ST_LOAD_RESET_ENABLE: begin
         spi_cs_n_reg_next = 1'b0;
         spi_clk_reg_next = 1'b0;
-        tx_shift_reg_next = {{(ADDR_W-8){1'b0}}, 8'h66};
+        byte_shift_reg_next = 8'h66;
         bit_count_next = 6'd8;
         state_next = ST_SHIFT_RESET_ENABLE;
       end
 
       ST_SHIFT_RESET_ENABLE: begin
         if (spi_clk_reg == 1'b0) begin
-          // Present next MOSI bit before raising SPI clock
-          spi_mosi_reg_next = tx_shift_reg[7];
+          spi_mosi_reg_next = byte_shift_reg[7];
           spi_clk_reg_next = 1'b1;
         end else begin
-          // Complete bit transfer on falling edge
           spi_clk_reg_next = 1'b0;
-          tx_shift_reg_next = {tx_shift_reg[ADDR_W-2:0], 1'b0};
+          byte_shift_reg_next = {byte_shift_reg[6:0], 1'b0};
           bit_count_next = bit_count - 1'b1;
 
           if (bit_count == 6'd1) begin
@@ -184,18 +188,18 @@ module spi_psram_ctrl #(
       ST_LOAD_RESET: begin
         spi_cs_n_reg_next = 1'b0;
         spi_clk_reg_next = 1'b0;
-        tx_shift_reg_next = {{(ADDR_W-8){1'b0}}, 8'h99};
+        byte_shift_reg_next = 8'h99;
         bit_count_next = 6'd8;
         state_next = ST_SHIFT_RESET;
       end
 
       ST_SHIFT_RESET: begin
         if (spi_clk_reg == 1'b0) begin
-          spi_mosi_reg_next = tx_shift_reg[7];
+          spi_mosi_reg_next = byte_shift_reg[7];
           spi_clk_reg_next = 1'b1;
         end else begin
           spi_clk_reg_next = 1'b0;
-          tx_shift_reg_next = {tx_shift_reg[ADDR_W-2:0], 1'b0};
+          byte_shift_reg_next = {byte_shift_reg[6:0], 1'b0};
           bit_count_next = bit_count - 1'b1;
 
           if (bit_count == 6'd1) begin
@@ -223,20 +227,18 @@ module spi_psram_ctrl #(
       ST_LOAD_COMMAND: begin
         spi_cs_n_reg_next = 1'b0;
         spi_clk_reg_next = 1'b0;
-        tx_shift_reg_next = request_rw_reg
-          ? {{(ADDR_W-8){1'b0}}, SPI_CMD_WRITE}
-          : {{(ADDR_W-8){1'b0}}, SPI_CMD_READ};
+        byte_shift_reg_next = request_rw_reg ? SPI_CMD_WRITE : SPI_CMD_READ;
         bit_count_next = 6'd8;
         state_next = ST_SHIFT_COMMAND;
       end
 
       ST_SHIFT_COMMAND: begin
         if (spi_clk_reg == 1'b0) begin
-          spi_mosi_reg_next = tx_shift_reg[7];
+          spi_mosi_reg_next = byte_shift_reg[7];
           spi_clk_reg_next = 1'b1;
         end else begin
           spi_clk_reg_next = 1'b0;
-          tx_shift_reg_next = {tx_shift_reg[ADDR_W-2:0], 1'b0};
+          byte_shift_reg_next = {byte_shift_reg[6:0], 1'b0};
           bit_count_next = bit_count - 1'b1;
 
           if (bit_count == 6'd1) begin
@@ -247,18 +249,18 @@ module spi_psram_ctrl #(
 
       ST_LOAD_ADDRESS: begin
         spi_clk_reg_next = 1'b0;
-        tx_shift_reg_next = request_addr_reg;
+        addr_shift_reg_next = request_addr_reg;
         bit_count_next = ADDR_W;
         state_next = ST_SHIFT_ADDRESS;
       end
 
       ST_SHIFT_ADDRESS: begin
         if (spi_clk_reg == 1'b0) begin
-          spi_mosi_reg_next = tx_shift_reg[ADDR_W-1];
+          spi_mosi_reg_next = addr_shift_reg[ADDR_W-1];
           spi_clk_reg_next = 1'b1;
         end else begin
           spi_clk_reg_next = 1'b0;
-          tx_shift_reg_next = {tx_shift_reg[ADDR_W-2:0], 1'b0};
+          addr_shift_reg_next = {addr_shift_reg[ADDR_W-2:0], 1'b0};
           bit_count_next = bit_count - 1'b1;
 
           if (bit_count == 6'd1) begin
@@ -275,18 +277,18 @@ module spi_psram_ctrl #(
 
       ST_LOAD_WRITE_DATA: begin
         spi_clk_reg_next = 1'b0;
-        tx_shift_reg_next = {{(ADDR_W-DATA_W){1'b0}}, request_wdata_reg};
+        byte_shift_reg_next = request_wdata_reg;
         bit_count_next = DATA_W;
         state_next = ST_SHIFT_WRITE_DATA;
       end
 
       ST_SHIFT_WRITE_DATA: begin
         if (spi_clk_reg == 1'b0) begin
-          spi_mosi_reg_next = tx_shift_reg[7];
+          spi_mosi_reg_next = byte_shift_reg[7];
           spi_clk_reg_next = 1'b1;
         end else begin
           spi_clk_reg_next = 1'b0;
-          tx_shift_reg_next = {tx_shift_reg[ADDR_W-2:0], 1'b0};
+          byte_shift_reg_next = {byte_shift_reg[6:0], 1'b0};
           bit_count_next = bit_count - 1'b1;
 
           if (bit_count == 6'd1) begin
@@ -297,10 +299,8 @@ module spi_psram_ctrl #(
 
       ST_SHIFT_READ_DATA: begin
         if (spi_clk_reg == 1'b0) begin
-          // Generate rising edge so memory can advance output
           spi_clk_reg_next = 1'b1;
         end else begin
-          // Sample read data after bringing clock back low
           spi_clk_reg_next = 1'b0;
           rx_shift_reg_next = {rx_shift_reg[DATA_W-2:0], spi_miso};
           bit_count_next = bit_count - 1'b1;
