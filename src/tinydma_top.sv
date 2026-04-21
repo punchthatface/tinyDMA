@@ -12,6 +12,8 @@ module tinydma_top #(
   input  logic [31:0]                       cfg_wdata,
   output logic [31:0]                       cfg_rdata,
   output logic                              dma_busy,
+  output logic [N_CH-1:0]                   chan_active_o,
+  output logic [N_CH-1:0]                   chan_done_o,
   output logic                              spi_clk,
   output logic                              spi_cs_n,
   output logic                              spi_mosi,
@@ -34,6 +36,8 @@ module tinydma_top #(
   assign chan_active[1] = chan1_state.active;
   assign chan_done[0]   = chan0_state.done;
   assign chan_done[1]   = chan1_state.done;
+  assign chan_active_o  = chan_active;
+  assign chan_done_o    = chan_done;
 
   cfg_reg u_cfg_reg (
     .clk         (clk),
