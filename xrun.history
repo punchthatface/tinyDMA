@@ -1,3 +1,0 @@
-s1(20Apr2026:22:01:34):  xrun tb/tb_spi_psram_ctrl.sv src/spi_psram_ctrl.sv 
-s2(20Apr2026:22:01:58):  xrun src/dma_pkg.sv tb/tb_spi_psram_ctrl.sv src/spi_psram_ctrl.sv 
-s3(20Apr2026:22:05:45):  xrun src/dma_pkg.sv tb/tb_spi_psram_ctrl.sv src/spi_psram_ctrl.sv 
