@@ -1,0 +1,19 @@
+//
+// File created by:  xrun
+// Do not modify this file
+//
+-XLMODE
+./xcelium.d/run.lnx8664.19.03.d
+-RUNMODE
+src/dma_pkg.sv
+tb/tb_spi_psram_ctrl.sv
+src/spi_psram_ctrl.sv
+-CDSLIB
+./xcelium.d/run.lnx8664.19.03.d/cdsrun.lib
+-HDLVAR
+./xcelium.d/run.lnx8664.19.03.d/hdlrun.var
+-MESSAGES
+-UPDATE
+-XLLIBSTORE
+./xcelium.d/run.lnx8664.19.03.d/xllibs
+-ALLOWUNBOUND

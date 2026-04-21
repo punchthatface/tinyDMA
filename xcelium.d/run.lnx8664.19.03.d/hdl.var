@@ -1,0 +1,5 @@
+define XMSIMRC	( /afs/ece.cmu.edu/support/cds/share/image/usr/cds/xcelium-19.03.010/tools/xcelium/files/xmsimrc, ~/.xmsimrc )
+include ./hdlrun.var
+define SNAPSHOT worklib.tb_spi_psram_ctrl:sv
+DEFINE RUNMODEDEFAULT 1
+DEFINE LIB_MAP ( + => worklib )

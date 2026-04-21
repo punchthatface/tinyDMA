@@ -1,0 +1,7 @@
+//
+// File created by:  xrun
+// Do not modify this file
+//
+src/dma_pkg.sv
+tb/tb_spi_psram_ctrl.sv
+src/spi_psram_ctrl.sv

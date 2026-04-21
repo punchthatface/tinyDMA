@@ -32,30 +32,32 @@ module psram_model (
       mem[i] = 8'h00;
     end
 
-    state = PM_IDLE;
-    cmd_shift_reg = '0;
-    addr_shift_reg = '0;
-    data_shift_reg = '0;
-    bit_count = '0;
-    miso = 1'b0;
+    state             = PM_IDLE;
+    cmd_shift_reg     = '0;
+    addr_shift_reg    = '0;
+    data_shift_reg    = '0;
+    bit_count         = '0;
+    miso              = 1'b0;
     reset_enable_seen = 1'b0;
   end
 
-  always_ff @(posedge cs_n) begin
-    state <= PM_CMD;
-    cmd_shift_reg <= '0;
-    addr_shift_reg <= '0;
-    data_shift_reg <= '0;
-    bit_count <= '0;
-    miso <= 1'b0;
-  end
-
-  always_ff @(posedge sclk) begin
-    if (!cs_n) begin
+  always @(posedge cs_n or posedge sclk or negedge sclk) begin
+    if (cs_n) begin
+      // Transaction end / standby
+      state          <= PM_IDLE;
+      cmd_shift_reg  <= '0;
+      addr_shift_reg <= '0;
+      data_shift_reg <= '0;
+      bit_count      <= '0;
+      miso           <= 1'b0;
+    end else if (sclk) begin
+      // Input latching on rising edge. The first rising edge after CS# goes low
+      // also starts the command phase.
       case (state)
+        PM_IDLE,
         PM_CMD: begin
           cmd_shift_reg <= {cmd_shift_reg[6:0], mosi};
-          bit_count <= bit_count + 1'b1;
+          bit_count     <= bit_count + 1'b1;
 
           if (bit_count == 6'd7) begin
             bit_count <= '0;
@@ -63,23 +65,25 @@ module psram_model (
             case ({cmd_shift_reg[6:0], mosi})
               8'h66: begin
                 reset_enable_seen <= 1'b1;
-                state <= PM_IDLE;
+                state             <= PM_IDLE;
               end
 
               8'h99: begin
-                if (reset_enable_seen) begin
-                  reset_enable_seen <= 1'b0;
-                end
-                state <= PM_IDLE;
+                reset_enable_seen <= 1'b0;
+                state             <= PM_IDLE;
               end
 
               8'h02,
               8'h03: begin
+                if (reset_enable_seen) begin
+                  reset_enable_seen <= 1'b0;
+                end
                 state <= PM_ADDR;
               end
 
               default: begin
-                state <= PM_IDLE;
+                reset_enable_seen <= 1'b0;
+                state             <= PM_IDLE;
               end
             endcase
           end
@@ -87,7 +91,7 @@ module psram_model (
 
         PM_ADDR: begin
           addr_shift_reg <= {addr_shift_reg[22:0], mosi};
-          bit_count <= bit_count + 1'b1;
+          bit_count      <= bit_count + 1'b1;
 
           if (bit_count == 6'd23) begin
             bit_count <= '0;
@@ -96,40 +100,39 @@ module psram_model (
               state <= PM_WRITE_DATA;
             end else begin
               data_shift_reg <= mem[{addr_shift_reg[6:0], mosi}];
-              state <= PM_READ_DATA;
+              state          <= PM_READ_DATA;
             end
           end
         end
 
         PM_WRITE_DATA: begin
           data_shift_reg <= {data_shift_reg[6:0], mosi};
-          bit_count <= bit_count + 1'b1;
+          bit_count      <= bit_count + 1'b1;
 
           if (bit_count == 6'd7) begin
             mem[addr_shift_reg[7:0]] <= {data_shift_reg[6:0], mosi};
-            bit_count <= '0;
-            state <= PM_IDLE;
+            bit_count                <= '0;
+            state                    <= PM_IDLE;
           end
         end
 
         default: begin
         end
       endcase
-    end
-  end
-
-  always_ff @(negedge sclk) begin
-    if (!cs_n && state == PM_READ_DATA) begin
-      miso <= data_shift_reg[7];
-      data_shift_reg <= {data_shift_reg[6:0], 1'b0};
-      bit_count <= bit_count + 1'b1;
-
-      if (bit_count == 6'd7) begin
-        bit_count <= '0;
-        state <= PM_IDLE;
-      end
     end else begin
-      miso <= 1'b0;
+      // Output timing on falling edge: data becomes available after the falling edge.
+      if (state == PM_READ_DATA) begin
+        miso           <= data_shift_reg[7];
+        data_shift_reg <= {data_shift_reg[6:0], 1'b0};
+        bit_count      <= bit_count + 1'b1;
+
+        if (bit_count == 6'd7) begin
+          bit_count <= '0;
+          state     <= PM_IDLE;
+        end
+      end else begin
+        miso <= 1'b0;
+      end
     end
   end
 
@@ -157,7 +160,8 @@ module tb_spi_psram_ctrl;
   logic              spi_miso;
 
   spi_psram_ctrl #(
-    .RESET_CYCLES(8)
+    .RESET_CYCLES(8),
+    .RESET_RECOVERY_CYCLES(6)
   ) dut (
     .clk(clk),
     .rst_n(rst_n),
@@ -243,7 +247,7 @@ module tb_spi_psram_ctrl;
     wait (req_ready == 1'b1);
 
     issue_write(24'h000010, 8'hAB);
-    issue_read(24'h000010, readback);
+    issue_read (24'h000010, readback);
 
     $display("Readback = 0x%02h", readback);
 
