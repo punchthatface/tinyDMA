@@ -52,6 +52,7 @@ module tb_dma_subsystem;
   logic [1:0] stall_countdown;
 
   integer i;
+  integer j;
 
   cfg_reg u_cfg_reg (
     .clk        (clk),
@@ -252,6 +253,7 @@ module tb_dma_subsystem;
         $display("FAIL: mem[0x%02h] expected 0x%02h got 0x%02h", addr, expected, mem[addr]);
         $finish;
       end
+      $display("    mem[0x%02h] = 0x%02h", addr, mem[addr]);
     end
   endtask
 
@@ -273,6 +275,8 @@ module tb_dma_subsystem;
         $display("FAIL: channel %0d ctrl unexpected: 0x%08h", channel, cfg_rdata);
         $finish;
       end
+      $display("    ch%0d ctrl = 0x%08h (start=%0b active=%0b done=%0b)",
+               channel, cfg_rdata, cfg_rdata[0], cfg_rdata[8], cfg_rdata[9]);
       cfg_re   <= 1'b0;
       cfg_addr <= '0;
     end
@@ -290,6 +294,10 @@ module tb_dma_subsystem;
 
     repeat (4) @(posedge clk);
     rst_n = 1'b1;
+
+    $display("");
+    $display("[tb_dma_subsystem] Test 1: channel 0 copy, increment source and destination");
+    $display("  src=0x10 dst=0x20 len=4 ctrl=start/inc_src/inc_dst");
 
     // Test 1: channel 0 increments source and destination.
     mem[8'h10] = 8'h11;
@@ -309,6 +317,9 @@ module tb_dma_subsystem;
     expect_byte(8'h23, 8'h44);
     expect_ctrl_status(0, 1'b0, 1'b0, 1'b1);
 
+    $display("[tb_dma_subsystem] Test 2: channel 1 fixed-source fill");
+    $display("  src=0x30 dst=0x40 len=3 ctrl=start/inc_dst");
+
     // Test 2: channel 1 fixed source, increment destination.
     mem[8'h30] = 8'hA9;
 
@@ -322,6 +333,9 @@ module tb_dma_subsystem;
     expect_byte(8'h41, 8'hA9);
     expect_byte(8'h42, 8'hA9);
     expect_ctrl_status(1, 1'b0, 1'b0, 1'b1);
+
+    $display("[tb_dma_subsystem] Test 3: fixed destination, increment source");
+    $display("  src=0x90 dst=0xA0 len=3 ctrl=start/inc_src");
 
     // Test 3: fixed destination, increment source.
     mem[8'h90] = 8'h10;
@@ -337,6 +351,9 @@ module tb_dma_subsystem;
     expect_byte(8'hA0, 8'h30);
     expect_ctrl_status(0, 1'b0, 1'b0, 1'b1);
 
+    $display("[tb_dma_subsystem] Test 4: zero-length transfer");
+    $display("  src=0xB1 dst=0xB0 len=0, destination should stay 0xEE");
+
     // Test 4: zero-length transfer should complete immediately and not touch memory.
     mem[8'hB0] = 8'hEE;
     cfg_write(3'd4, 32'h0000_00B1); // ch1 src
@@ -347,6 +364,9 @@ module tb_dma_subsystem;
     repeat (10) @(posedge clk);
     expect_byte(8'hB0, 8'hEE);
     expect_ctrl_status(1, 1'b0, 1'b0, 1'b1);
+
+    $display("[tb_dma_subsystem] Test 5: both channels armed together");
+    $display("  ch0: src=0x50 dst=0x70 len=2, ch1: src=0x60 dst=0x80 len=2");
 
     // Test 5: both channels armed together with multi-byte copies.
     mem[8'h50] = 8'h5A;
@@ -372,6 +392,9 @@ module tb_dma_subsystem;
     expect_ctrl_status(0, 1'b0, 1'b0, 1'b1);
     expect_ctrl_status(1, 1'b0, 1'b0, 1'b1);
 
+    $display("[tb_dma_subsystem] Test 6: stalled ready/valid memory behavior");
+    $display("  src=0xC0 dst=0xD0 len=4 with stall_mode=1");
+
     // Test 6: same DMA path under slower ready/valid behavior.
     stall_mode = 1'b1;
     mem[8'hC0] = 8'hDE;
@@ -391,7 +414,31 @@ module tb_dma_subsystem;
     expect_byte(8'hD3, 8'hEF);
     expect_ctrl_status(0, 1'b0, 1'b0, 1'b1);
 
-    $display("PASS");
+    $display("[tb_dma_subsystem] Test 7: longer transfer through LEN_W counter path");
+    $display("  src=0xE0 dst=0x10 len=16 ctrl=start/inc_src/inc_dst");
+
+    // Test 7: longer transfer near the LEN_W boundary used by the TT build.
+    // This catches counter width mistakes without making the sim unnecessarily
+    // slow. Addresses stay away from 0xFF so the simple 256-byte model does not
+    // wrap during this test.
+    stall_mode = 1'b0;
+    for (j = 0; j < 16; j = j + 1) begin
+      mem[8'hE0 + j[7:0]] = 8'h80 + j[7:0];
+      mem[8'h10 + j[7:0]] = 8'h00;
+    end
+
+    cfg_write(3'd0, 32'h0000_00E0); // ch0 src
+    cfg_write(3'd1, 32'h0000_0010); // ch0 dst
+    cfg_write(3'd2, 32'h0000_0010); // ch0 len = 16
+    cfg_write(3'd3, 32'h0000_0007); // ch0 start + inc both
+
+    wait_done(0);
+    for (j = 0; j < 16; j = j + 1) begin
+      expect_byte(8'h10 + j[7:0], 8'h80 + j[7:0]);
+    end
+    expect_ctrl_status(0, 1'b0, 1'b0, 1'b1);
+
+    $display("[tb_dma_subsystem] PASS");
     $finish;
   end
 

@@ -98,6 +98,9 @@ module tb_spi_master;
     repeat (4) @(posedge clk);
     rst_n = 1'b1;
 
+    $display("");
+    $display("[tb_spi_master] Test 1: transmit 8'h%02h on MOSI", expected_tx);
+
     @(posedge clk);
     tx_data <= {8'h00, expected_tx};
     nbits   <= 6'd8;
@@ -118,6 +121,10 @@ module tb_spi_master;
       $display("FAIL: expected 8 transmitted bits, got %0d", tx_bit_count);
       $finish;
     end
+
+    $display("  observed MOSI byte = 0x%02h, transmitted bits = %0d", observed_tx, tx_bit_count);
+
+    $display("[tb_spi_master] Test 2: receive 8'h%02h on MISO", expected_rx);
 
     @(posedge clk);
     observed_tx <= '0;
@@ -143,7 +150,9 @@ module tb_spi_master;
       $finish;
     end
 
-    $display("PASS");
+    $display("  observed rx_data[7:0] = 0x%02h", rx_data[7:0]);
+    $display("  idle pins: cs_n=%0b sck=%0b", spi_cs_n, spi_sck);
+    $display("[tb_spi_master] PASS");
     $finish;
   end
 

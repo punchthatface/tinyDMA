@@ -282,6 +282,7 @@ module tb_spi_psram_ctrl;
     input logic [DATA_W-1:0] data
   );
     begin
+      $display("  WRITE request: addr=0x%06h data=0x%02h", {{(24-ADDR_W){1'b0}}, addr}, data);
       @(posedge clk);
       wait_for_req_ready();
       req_addr  <= addr;
@@ -302,6 +303,7 @@ module tb_spi_psram_ctrl;
     output logic [DATA_W-1:0] data
   );
     begin
+      $display("  READ  request: addr=0x%06h", {{(24-ADDR_W){1'b0}}, addr});
       @(posedge clk);
       wait_for_req_ready();
       req_addr  <= addr;
@@ -315,6 +317,7 @@ module tb_spi_psram_ctrl;
       wait_for_busy_value(1'b1, "Timed out waiting for busy to assert during read");
       wait_for_rsp_valid();
       data = rsp_rdata;
+      $display("  READ response: addr=0x%06h data=0x%02h", {{(24-ADDR_W){1'b0}}, addr}, data);
 
       @(posedge clk);
       wait_for_busy_value(1'b0, "Timed out waiting for busy to deassert after read");
@@ -324,6 +327,7 @@ module tb_spi_psram_ctrl;
   logic [7:0] readback;
   logic [7:0] readback2;
   logic [7:0] readback3;
+  logic [7:0] readback4;
 
   initial begin
     clk = 1'b0;
@@ -335,9 +339,13 @@ module tb_spi_psram_ctrl;
     readback = '0;
     readback2 = '0;
     readback3 = '0;
+    readback4 = '0;
 
     repeat (4) @(posedge clk);
     rst_n = 1'b1;
+
+    $display("");
+    $display("[tb_spi_psram_ctrl] Test 1: PSRAM initialization/reset sequence");
 
     wait_for_req_ready();
 
@@ -353,16 +361,28 @@ module tb_spi_psram_ctrl;
       fail_test("SPI pins were not in idle state after initialization");
     end
 
+    $display("  observed reset commands: prev=0x%02h last=0x%02h", mem.prev_cmd, mem.last_cmd);
+    $display("  reset_enable_count=%0d reset_count=%0d", mem.reset_enable_count, mem.reset_count);
+    $display("  idle pins: cs_n=%0b spi_clk=%0b", spi_cs_n, spi_clk);
+
+    $display("[tb_spi_psram_ctrl] Test 2: byte write/read at low addresses");
     issue_write(24'h000010, 8'hAB);
     issue_read (24'h000010, readback);
     issue_write(24'h00007F, 8'h3C);
     issue_read (24'h00007F, readback2);
+
+    $display("[tb_spi_psram_ctrl] Test 3: truncated high input address compatibility check");
     issue_write(24'h800055, 8'h5A);
     issue_read (24'h800055, readback3);
+
+    $display("[tb_spi_psram_ctrl] Test 4: reduced 16-bit address zero-extension");
+    issue_write(16'hF234, 8'hC6);
+    issue_read (16'hF234, readback4);
 
     $display("Readback[0x000010] = 0x%02h", readback);
     $display("Readback[0x00007F] = 0x%02h", readback2);
     $display("Readback[0x800055] = 0x%02h", readback3);
+    $display("Readback[0x00F234] = 0x%02h", readback4);
 
     if (readback != 8'hAB) begin
       fail_test("Incorrect readback at address 0x000010");
@@ -376,15 +396,19 @@ module tb_spi_psram_ctrl;
       fail_test("Incorrect readback when address[23] was high");
     end
 
-    if (mem.last_addr[23] != 1'b0) begin
-      fail_test("Controller did not force the transmitted address MSB low");
+    if (readback4 != 8'hC6) begin
+      fail_test("Incorrect readback at reduced 16-bit address 0xF234");
+    end
+
+    if (mem.last_addr != 24'h00F234) begin
+      fail_test("Controller did not zero-extend the reduced 16-bit address");
     end
 
     if (mem.mem[8'h55] != 8'h5A) begin
       fail_test("PSRAM model did not receive masked address 0x000055 on the wire");
     end
 
-    if (mem.write_count != 3 || mem.read_count != 3) begin
+    if (mem.write_count != 4 || mem.read_count != 4) begin
       fail_test("Unexpected number of memory read/write commands observed");
     end
 
@@ -392,7 +416,9 @@ module tb_spi_psram_ctrl;
       fail_test("SPI pins did not return to idle state after transactions");
     end
 
-    $display("PASS");
+    $display("  command counts: writes=%0d reads=%0d", mem.write_count, mem.read_count);
+    $display("  final observed wire address = 0x%06h", mem.last_addr);
+    $display("[tb_spi_psram_ctrl] PASS");
 
     repeat (10) @(posedge clk);
     $finish;

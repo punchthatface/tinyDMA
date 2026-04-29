@@ -119,6 +119,7 @@ module tb_tinydma_top;
         $display("FAIL: PSRAM[0x%02h] expected 0x%02h got 0x%02h", addr, expected, mem.mem[addr]);
         $finish;
       end
+      $display("    PSRAM[0x%02h] = 0x%02h", addr, mem.mem[addr]);
     end
   endtask
 
@@ -137,6 +138,8 @@ module tb_tinydma_top;
         $display("FAIL: ctrl @%0d unexpected: 0x%08h", addr, ctrl_word);
         $finish;
       end
+      $display("    ctrl[%0d] = 0x%08h (start=%0b active=%0b done=%0b)",
+               addr, ctrl_word, ctrl_word[0], ctrl_word[8], ctrl_word[9]);
     end
   endtask
 
@@ -154,8 +157,17 @@ module tb_tinydma_top;
     repeat (4) @(posedge clk);
     rst_n = 1'b1;
 
+    $display("");
+    $display("[tb_tinydma_top] Test 1: wait for PSRAM init/reset through top-level SPI pins");
+
     // Wait for PSRAM init/reset sequence to finish.
     repeat (100) @(posedge clk);
+    $display("  observed reset commands: prev=0x%02h last=0x%02h", mem.prev_cmd, mem.last_cmd);
+    $display("  command counts after init: reset_enable=%0d reset=%0d",
+             mem.reset_enable_count, mem.reset_count);
+
+    $display("[tb_tinydma_top] Test 2: channel 0 full top-level 4-byte copy");
+    $display("  src=0x10 dst=0x20 len=4 ctrl=start/inc_src/inc_dst");
 
     // Preload source bytes directly into the PSRAM model.
     mem.mem[8'h10] = 8'h12;
@@ -181,6 +193,11 @@ module tb_tinydma_top;
       $display("FAIL: channel 0 ctrl unexpected: 0x%08h", ctrl0);
       $finish;
     end
+    $display("    ch0 ctrl = 0x%08h (start=%0b active=%0b done=%0b)",
+             ctrl0, ctrl0[0], ctrl0[8], ctrl0[9]);
+
+    $display("[tb_tinydma_top] Test 3: channel 1 fixed-source fill");
+    $display("  src=0x30 dst=0x40 len=3 ctrl=start/inc_dst");
 
     // Program channel 1 for a fixed-source fill.
     mem.mem[8'h30] = 8'hA5;
@@ -200,6 +217,11 @@ module tb_tinydma_top;
       $display("FAIL: channel 1 ctrl unexpected: 0x%08h", ctrl1);
       $finish;
     end
+    $display("    ch1 ctrl = 0x%08h (start=%0b active=%0b done=%0b)",
+             ctrl1, ctrl1[0], ctrl1[8], ctrl1[9]);
+
+    $display("[tb_tinydma_top] Test 4: zero-length transfer");
+    $display("  src=0x51 dst=0x50 len=0, destination should stay 0xE7");
 
     // Zero-length should set done without touching destination.
     mem.mem[8'h50] = 8'hE7;
@@ -212,7 +234,7 @@ module tb_tinydma_top;
     expect_mem_byte(8'h50, 8'hE7);
     expect_ctrl_bits(3'd7, 1'b0, 1'b0, 1'b1);
 
-    $display("PASS");
+    $display("[tb_tinydma_top] PASS");
     $finish;
   end
 
