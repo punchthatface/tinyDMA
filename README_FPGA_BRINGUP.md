@@ -2,9 +2,9 @@
 
 Known-good board test top:
 
-- Source file: `src/ChipInterface_psram_bringup.sv`
+- Source file: `fpga/ChipInterface_psram_bringup.sv`
 - Dedicated build flow: `build_fpga_bringup.sh`
-- Current `src/ChipInterface.sv` is also the same simple PSRAM bring-up harness, but the
+- Current `fpga/ChipInterface.sv` is also the same simple PSRAM bring-up harness, but the
   dedicated script preserves this checkpoint explicitly.
 
 Known-good PMOD observation from EX2 task 5:

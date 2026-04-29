@@ -15,6 +15,8 @@ module tb_tinydma_top;
   logic [31:0]                       cfg_rdata;
 
   logic dma_busy;
+  logic [N_CH-1:0] chan_active_o;
+  logic [N_CH-1:0] chan_done_o;
   logic spi_clk;
   logic spi_cs_n;
   logic spi_mosi;
@@ -32,6 +34,8 @@ module tb_tinydma_top;
     .cfg_wdata(cfg_wdata),
     .cfg_rdata(cfg_rdata),
     .dma_busy (dma_busy),
+    .chan_active_o(chan_active_o),
+    .chan_done_o(chan_done_o),
     .spi_clk  (spi_clk),
     .spi_cs_n (spi_cs_n),
     .spi_mosi (spi_mosi),
@@ -118,6 +122,24 @@ module tb_tinydma_top;
     end
   endtask
 
+  task automatic expect_ctrl_bits(
+    input logic [$clog2(N_CH*REGS_PER_CH)-1:0] addr,
+    input logic expected_start,
+    input logic expected_active,
+    input logic expected_done
+  );
+    logic [31:0] ctrl_word;
+    begin
+      cfg_read(addr, ctrl_word);
+      if (ctrl_word[0] !== expected_start ||
+          ctrl_word[8] !== expected_active ||
+          ctrl_word[9] !== expected_done) begin
+        $display("FAIL: ctrl @%0d unexpected: 0x%08h", addr, ctrl_word);
+        $finish;
+      end
+    end
+  endtask
+
   logic [31:0] ctrl0;
   logic [31:0] ctrl1;
 
@@ -178,6 +200,17 @@ module tb_tinydma_top;
       $display("FAIL: channel 1 ctrl unexpected: 0x%08h", ctrl1);
       $finish;
     end
+
+    // Zero-length should set done without touching destination.
+    mem.mem[8'h50] = 8'hE7;
+    cfg_write(3'd4, 32'h0000_0051);
+    cfg_write(3'd5, 32'h0000_0050);
+    cfg_write(3'd6, 32'h0000_0000);
+    cfg_write(3'd7, 32'h0000_0007);
+
+    wait_channel_done(1);
+    expect_mem_byte(8'h50, 8'hE7);
+    expect_ctrl_bits(3'd7, 1'b0, 1'b0, 1'b1);
 
     $display("PASS");
     $finish;

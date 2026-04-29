@@ -112,7 +112,7 @@ module ChipInterface (
   assign req_addr  = op_addr;
   assign req_wdata = op_wdata;
 
-  always_ff @(posedge clk or negedge rst_n) begin
+  always_ff @(posedge clk, negedge rst_n) begin
     if (!rst_n) begin
       op_pending       <= 1'b0;
       op_rw            <= 1'b0;
@@ -238,7 +238,7 @@ module debounce_one_shot #(
   logic [COUNT_W-1:0] count, count_next;
   logic pressed_pulse_next;
 
-  always_ff @(posedge clk or negedge rst_n) begin
+  always_ff @(posedge clk, negedge rst_n) begin
     if (!rst_n) begin
       sync_ff0      <= 1'b0;
       sync_ff1      <= 1'b0;
