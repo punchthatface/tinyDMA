@@ -1,5 +1,7 @@
 # FPGA Bring-Up Notes
 
+These notes document the standalone ULX3S hardware test used to validate the APS6404 PSRAM interface before integrating it with the full DMA engine.
+
 Known-good board test top:
 
 - Source file: `fpga/ChipInterface_psram_bringup.sv`
